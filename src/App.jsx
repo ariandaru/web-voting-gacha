@@ -68,7 +68,7 @@ function PublicVotingPage() {
     const { data, error } = await supabase
       .from('polls')
       .select(`id, title, options ( id, name, image_url )`)
-      .order('id', { ascending: false }); // Menampilkan yang terbaru di atas
+      .order('id', { ascending: false });
     if (!error) setPolls(data);
   }
 
@@ -161,17 +161,17 @@ function AdminLoginPage() {
 function AdminDashboard() {
   const [polls, setPolls] = useState([]);
   const [newPollTitle, setNewPollTitle] = useState('');
-  const [option1, setOption1] = useState('');
-  const [option2, setOption2] = useState('');
-  const [image1, setImage1] = useState(null);
-  const [image2, setImage2] = useState(null);
-  const [isUploading, setIsUploading] = useState(false);
   
-  // State untuk Fitur Edit
+  // STATE BARU: Menggunakan array dinamis agar jumlah kandidat bisa tak terbatas
+  const [options, setOptions] = useState([
+    { id: null, name: '', file: null, existingUrl: '' },
+    { id: null, name: '', file: null, existingUrl: '' }
+  ]);
+  const [deletedOptionIds, setDeletedOptionIds] = useState([]); // Menyimpan ID kandidat yang dihapus saat Edit
+  
+  const [isUploading, setIsUploading] = useState(false);
   const [editMode, setEditMode] = useState(false);
   const [editPollId, setEditPollId] = useState(null);
-  const [editOpt1Id, setEditOpt1Id] = useState(null);
-  const [editOpt2Id, setEditOpt2Id] = useState(null);
 
   useEffect(() => { fetchAdminPolls(); }, []);
 
@@ -189,38 +189,78 @@ function AdminDashboard() {
     return supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl;
   }
 
-  // Fungsi Tambah & Edit
+  // --- FUNGSI ARRAY DINAMIS KANDIDAT ---
+  function handleOptionChange(index, field, value) {
+    const newOptions = [...options];
+    newOptions[index][field] = value;
+    setOptions(newOptions);
+  }
+
+  function addOption() {
+    setOptions([...options, { id: null, name: '', file: null, existingUrl: '' }]);
+  }
+
+  function removeOption(index) {
+    const optToRemove = options[index];
+    if (optToRemove.id) {
+      setDeletedOptionIds([...deletedOptionIds, optToRemove.id]); // Tandai untuk dihapus di database
+    }
+    const newOptions = options.filter((_, i) => i !== index);
+    setOptions(newOptions);
+  }
+
+  // --- FUNGSI SAVE (CREATE & UPDATE) ---
   async function handleCreateOrUpdate(e) {
     e.preventDefault();
-    if (!newPollTitle || !option1 || !option2) { alert("Isi judul dan minimal 2 kandidat!"); return; }
+    if (!newPollTitle || options.length < 2) { alert("Isi judul dan minimal 2 kandidat!"); return; }
+    
+    // Validasi pastikan nama game tidak kosong
+    const isAnyNameEmpty = options.some(opt => opt.name.trim() === '');
+    if (isAnyNameEmpty) { alert("Semua kolom nama kandidat harus diisi!"); return; }
+
     setIsUploading(true);
     
-    const imageUrl1 = await uploadImage(image1);
-    const imageUrl2 = await uploadImage(image2);
+    // Upload semua gambar baru
+    const uploadedUrls = await Promise.all(options.map(async (opt) => {
+      if (opt.file) return await uploadImage(opt.file);
+      return opt.existingUrl; // Jika tidak ada file baru, pakai gambar lama (jika ada)
+    }));
 
     if (editMode) {
-      // Proses UPDATE Data
+      // UPDATE: Judul Kategori
       await supabase.from('polls').update({ title: newPollTitle }).eq('id', editPollId);
       
-      let updateData1 = { name: option1 };
-      if (imageUrl1) updateData1.image_url = imageUrl1;
-      await supabase.from('options').update(updateData1).eq('id', editOpt1Id);
+      // HAPUS kandidat yang dibuang dari form (Hapus suaranya dulu agar tidak error)
+      if (deletedOptionIds.length > 0) {
+        await supabase.from('votes').delete().in('option_id', deletedOptionIds);
+        await supabase.from('options').delete().in('id', deletedOptionIds);
+      }
 
-      let updateData2 = { name: option2 };
-      if (imageUrl2) updateData2.image_url = imageUrl2;
-      await supabase.from('options').update(updateData2).eq('id', editOpt2Id);
-
+      // UPDATE / INSERT kandidat baru
+      for (let i = 0; i < options.length; i++) {
+        const opt = options[i];
+        const url = uploadedUrls[i];
+        if (opt.id) {
+          await supabase.from('options').update({ name: opt.name, image_url: url }).eq('id', opt.id);
+        } else {
+          await supabase.from('options').insert([{ poll_id: editPollId, name: opt.name, image_url: url }]);
+        }
+      }
       alert("Kategori berhasil diperbarui!");
       cancelEdit();
     } else {
-      // Proses CREATE Data Baru
+      // CREATE: Kategori Baru
       const { data: pollData, error: pollError } = await supabase.from('polls').insert([{ title: newPollTitle }]).select();
       if (pollError) { setIsUploading(false); return; }
       
-      await supabase.from('options').insert([
-        { poll_id: pollData[0].id, name: option1, image_url: imageUrl1 },
-        { poll_id: pollData[0].id, name: option2, image_url: imageUrl2 }
-      ]);
+      // CREATE: Multi Kandidat (Array Insert)
+      const optionsToInsert = options.map((opt, index) => ({
+        poll_id: pollData[0].id,
+        name: opt.name,
+        image_url: uploadedUrls[index]
+      }));
+      await supabase.from('options').insert(optionsToInsert);
+
       alert("Voting dipublish!");
       resetForm();
     }
@@ -229,36 +269,33 @@ function AdminDashboard() {
     fetchAdminPolls();
   }
 
-  // Fungsi Hapus Data
+  // --- FUNGSI DELETE KATEGORI ---
   async function handleDelete(pollId) {
     if (!window.confirm("YAKIN INGIN MENGHAPUS KATEGORI INI?\nSemua data game dan suara akan terhapus permanen.")) return;
-    
-    // Hapus dari database (Votes -> Options -> Polls) agar aman
     await supabase.from('votes').delete().eq('poll_id', pollId);
     await supabase.from('options').delete().eq('poll_id', pollId);
-    const { error } = await supabase.from('polls').delete().eq('id', pollId);
-    
-    if (error) alert("Gagal menghapus kategori!");
-    else fetchAdminPolls();
+    await supabase.from('polls').delete().eq('id', pollId);
+    fetchAdminPolls();
   }
 
-  // Fungsi Masuk Mode Edit
+  // --- FUNGSI MODE EDIT & RESET ---
   function startEdit(poll) {
     setEditMode(true);
     setEditPollId(poll.id);
     setNewPollTitle(poll.title);
-    setOption1(poll.options[0]?.name || '');
-    setEditOpt1Id(poll.options[0]?.id || null);
-    setOption2(poll.options[1]?.name || '');
-    setEditOpt2Id(poll.options[1]?.id || null);
-    setImage1(null);
-    setImage2(null);
-    window.scrollTo({ top: 0, behavior: 'smooth' }); // Scroll otomatis ke atas
+    
+    const formattedOptions = poll.options.map(opt => ({
+      id: opt.id, name: opt.name, file: null, existingUrl: opt.image_url
+    }));
+    setOptions(formattedOptions);
+    setDeletedOptionIds([]);
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   }
 
   function resetForm() {
-    setNewPollTitle(''); setOption1(''); setOption2('');
-    setImage1(null); setImage2(null);
+    setNewPollTitle('');
+    setOptions([{ id: null, name: '', file: null, existingUrl: '' }, { id: null, name: '', file: null, existingUrl: '' }]);
+    setDeletedOptionIds([]);
   }
 
   function cancelEdit() {
@@ -276,26 +313,38 @@ function AdminDashboard() {
         <button onClick={() => window.location.href = '/'} style={{ background: '#233546', color: 'white', border: 'none', padding: '10px 20px', cursor: 'pointer' }}>View Public Site</button>
       </div>
 
+      {/* FORM INPUT ADMIN */}
       <div style={{ background: '#131822', padding: '30px', border: editMode ? '2px solid #fbc02d' : '1px solid #233546', marginBottom: '40px' }}>
         <h3 style={{ marginTop: 0, marginBottom: '20px', color: editMode ? '#fbc02d' : '#fff' }}>
           {editMode ? '✏️ Edit Kategori Voting' : '➕ Buat Kategori Baru'}
         </h3>
         <form onSubmit={handleCreateOrUpdate}>
           <input type="text" placeholder="Category Title" value={newPollTitle} onChange={(e) => setNewPollTitle(e.target.value)} style={inputStyle} />
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
-            <div style={{ flex: 1, minWidth: '250px', background: '#1c212b', padding: '20px' }}>
-              <h4 style={{ margin: '0 0 15px 0' }}>Nominee 1</h4>
-              <input type="text" placeholder="Game Name" value={option1} onChange={(e) => setOption1(e.target.value)} style={inputStyle} />
-              <p style={{ fontSize: '12px', color: '#888', margin: '0 0 5px 0' }}>{editMode ? '*Upload foto baru jika ingin mengganti' : '*Upload foto kandidat'}</p>
-              <input type="file" accept="image/*" onChange={(e) => setImage1(e.target.files[0])} style={{ color: '#aaa' }} />
-            </div>
-            <div style={{ flex: 1, minWidth: '250px', background: '#1c212b', padding: '20px' }}>
-              <h4 style={{ margin: '0 0 15px 0' }}>Nominee 2</h4>
-              <input type="text" placeholder="Game Name" value={option2} onChange={(e) => setOption2(e.target.value)} style={inputStyle} />
-              <p style={{ fontSize: '12px', color: '#888', margin: '0 0 5px 0' }}>{editMode ? '*Upload foto baru jika ingin mengganti' : '*Upload foto kandidat'}</p>
-              <input type="file" accept="image/*" onChange={(e) => setImage2(e.target.files[0])} style={{ color: '#aaa' }} />
-            </div>
+          
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: '20px', marginBottom: '20px' }}>
+            {options.map((opt, index) => (
+              <div key={index} style={{ background: '#1c212b', padding: '20px', border: '1px solid #333', position: 'relative' }}>
+                
+                {/* Tombol Hapus Kandidat (Hanya muncul jika lebih dari 2) */}
+                {options.length > 2 && (
+                  <button type="button" onClick={() => removeOption(index)} style={{ position: 'absolute', top: '10px', right: '10px', background: 'transparent', border: 'none', color: '#d32f2f', fontWeight: 'bold', cursor: 'pointer' }}>
+                    ✕
+                  </button>
+                )}
+
+                <h4 style={{ margin: '0 0 15px 0', color: '#4dd0e1' }}>Nominee {index + 1}</h4>
+                <input type="text" placeholder="Game Name" value={opt.name} onChange={(e) => handleOptionChange(index, 'name', e.target.value)} style={inputStyle} />
+                
+                <p style={{ fontSize: '12px', color: '#888', margin: '0 0 5px 0' }}>{editMode && opt.existingUrl ? '*Upload foto baru jika ingin mengganti' : '*Upload foto kandidat'}</p>
+                <input type="file" accept="image/*" onChange={(e) => handleOptionChange(index, 'file', e.target.files[0])} style={{ color: '#aaa', fontSize: '12px', width: '100%' }} />
+              </div>
+            ))}
           </div>
+          
+          {/* Tombol Tambah Kandidat (Dynamic Array) */}
+          <button type="button" onClick={addOption} style={{ width: '100%', padding: '12px', background: '#233546', color: '#fff', border: '1px dashed #4dd0e1', marginBottom: '20px', cursor: 'pointer', fontWeight: 'bold' }}>
+            + TAMBAH KANDIDAT
+          </button>
           
           <div style={{ display: 'flex', gap: '10px' }}>
             <button disabled={isUploading} type="submit" className="vote-btn" style={{ background: isUploading ? '#333' : (editMode ? '#fbc02d' : '#1e88e5'), color: editMode ? '#000' : '#fff', flex: 1 }}>
@@ -308,6 +357,7 @@ function AdminDashboard() {
         </form>
       </div>
 
+      {/* LIST KATEGORI */}
       <div>
         <h3 style={{ color: '#1e88e5' }}>📊 Live Voting Results & Manajemen</h3>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
@@ -323,12 +373,10 @@ function AdminDashboard() {
                 ))}
               </ul>
               
-              {/* Tombol Aksi Admin */}
               <div style={{ display: 'flex', gap: '10px', borderTop: '1px solid #333', paddingTop: '15px' }}>
                 <button onClick={() => startEdit(poll)} style={{ flex: 1, padding: '10px', background: 'transparent', border: '1px solid #fbc02d', color: '#fbc02d', fontWeight: 'bold', cursor: 'pointer', textTransform: 'uppercase' }}>Edit</button>
                 <button onClick={() => handleDelete(poll.id)} style={{ flex: 1, padding: '10px', background: 'transparent', border: '1px solid #d32f2f', color: '#d32f2f', fontWeight: 'bold', cursor: 'pointer', textTransform: 'uppercase' }}>Hapus</button>
               </div>
-
             </div>
           ))}
         </div>
