@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { BrowserRouter, Routes, Route, useNavigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import { supabase } from './supabase';
 
 export default function App() {
@@ -15,12 +15,16 @@ export default function App() {
   );
 }
 
-// --- 1. HALAMAN PUBLIK (Bersih tanpa jumlah suara & tanpa menu navigasi) ---
+// --- 1. HALAMAN PUBLIK (Hanya 1 Vote Per Browser) ---
 function PublicVotingPage() {
   const [polls, setPolls] = useState([]);
+  const [votedPolls, setVotedPolls] = useState({});
 
   useEffect(() => {
     fetchPolls();
+    // Membaca memori browser saat web pertama kali dibuka
+    const storedVotes = JSON.parse(localStorage.getItem('votedPolls')) || {};
+    setVotedPolls(storedVotes);
   }, []);
 
   async function fetchPolls() {
@@ -35,6 +39,12 @@ function PublicVotingPage() {
   }
 
   async function handleVote(pollId, optionId) {
+    // Keamanan ganda: Tolak jika memori browser mencatat sudah vote
+    if (votedPolls[pollId]) {
+      alert("Kamu sudah memberikan suara untuk voting ini!");
+      return;
+    }
+
     const { error } = await supabase
       .from('votes')
       .insert([{ poll_id: pollId, option_id: optionId }]);
@@ -44,6 +54,12 @@ function PublicVotingPage() {
       alert("Gagal melakukan vote.");
     } else {
       alert("Berhasil melakukan vote! Terima kasih suaranya.");
+      
+      // Simpan catatan ke memori browser agar tombol terkunci
+      const newVotedPolls = { ...votedPolls, [pollId]: true };
+      setVotedPolls(newVotedPolls);
+      localStorage.setItem('votedPolls', JSON.stringify(newVotedPolls));
+      
       fetchPolls();
     }
   }
@@ -55,33 +71,44 @@ function PublicVotingPage() {
       
       {polls.length === 0 ? <p style={{ textAlign: 'center' }}>Belum ada voting saat ini.</p> : null}
       
-      {polls.map((poll) => (
-        <div key={poll.id} style={{ border: '2px solid #eee', padding: '20px', borderRadius: '12px', marginBottom: '25px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', background: 'white' }}>
-          <h3 style={{ marginTop: 0, textAlign: 'center', fontSize: '24px' }}>{poll.title}</h3>
-          
-          <div style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
-            {poll.options.map((option) => (
-              <div key={option.id} style={{ flex: 1, textAlign: 'center', background: '#f8f9fa', padding: '15px', borderRadius: '8px' }}>
-                {option.image_url ? (
-                  <img src={option.image_url} alt={option.name} style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '10px' }} />
-                ) : (
-                  <div style={{ width: '100%', height: '200px', background: '#e9ecef', borderRadius: '8px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No Image</div>
-                )}
-                
-                <h4 style={{ margin: '15px 0' }}>{option.name}</h4>
-                
-                {/* JUMLAH SUARA SENGAJA DIHAPUS DARI SINI AGAR RAHASIA */}
-                
-                <button 
-                  onClick={() => handleVote(poll.id, option.id)}
-                  style={{ background: '#28a745', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: 'pointer', fontSize: '16px', width: '100%' }}>
-                  Vote
-                </button>
+      {polls.map((poll) => {
+        const hasVoted = votedPolls[poll.id];
+
+        return (
+          <div key={poll.id} style={{ border: '2px solid #eee', padding: '20px', borderRadius: '12px', marginBottom: '25px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', background: 'white' }}>
+            <h3 style={{ marginTop: 0, textAlign: 'center', fontSize: '24px' }}>{poll.title}</h3>
+            
+            {/* Pesan jika sudah vote */}
+            {hasVoted && (
+              <div style={{ background: '#d4edda', color: '#155724', padding: '10px', borderRadius: '6px', textAlign: 'center', marginTop: '15px', fontWeight: 'bold' }}>
+                ✅ Kamu sudah memberikan suara pada kategori ini.
               </div>
-            ))}
+            )}
+
+            <div style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
+              {poll.options.map((option) => (
+                <div key={option.id} style={{ flex: 1, textAlign: 'center', background: '#f8f9fa', padding: '15px', borderRadius: '8px', opacity: hasVoted ? 0.6 : 1 }}>
+                  {option.image_url ? (
+                    <img src={option.image_url} alt={option.name} style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '10px' }} />
+                  ) : (
+                    <div style={{ width: '100%', height: '200px', background: '#e9ecef', borderRadius: '8px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No Image</div>
+                  )}
+                  
+                  <h4 style={{ margin: '15px 0' }}>{option.name}</h4>
+                  
+                  {/* Tombol akan mati dan abu-abu jika hasVoted = true */}
+                  <button 
+                    onClick={() => handleVote(poll.id, option.id)}
+                    disabled={hasVoted}
+                    style={{ background: hasVoted ? '#6c757d' : '#28a745', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: hasVoted ? 'not-allowed' : 'pointer', fontSize: '16px', width: '100%' }}>
+                    {hasVoted ? 'Sudah Vote' : 'Vote'}
+                  </button>
+                </div>
+              ))}
+            </div>
           </div>
-        </div>
-      ))}
+        );
+      })}
     </div>
   );
 }
@@ -91,7 +118,6 @@ function AdminLoginPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
 
-  // 🔑 PASSWORD ADMIN KAMU (Bisa diubah sesuka hati di sini)
   const ADMIN_PASSWORD = 'admin123'; 
 
   function handleLogin(e) {
@@ -104,7 +130,6 @@ function AdminLoginPage() {
     }
   }
 
-  // Jika belum memasukkan password yang benar, tampilkan form login
   if (!isAuthenticated) {
     return (
       <div style={{ maxWidth: '400px', margin: '80px auto', background: '#f8f9fa', padding: '30px', borderRadius: '12px', border: '1px solid #ddd', textAlign: 'center' }}>
@@ -124,7 +149,6 @@ function AdminLoginPage() {
     );
   }
 
-  // Jika sudah login, tampilkan Panel Admin (Lengkap dengan Form Buat Voting & Rekap Suara)
   return <AdminDashboard />;
 }
 
@@ -143,7 +167,6 @@ function AdminDashboard() {
   }, []);
 
   async function fetchAdminPolls() {
-    // Admin mengambil data lengkap BESERTA jumlah suaranya
     const { data, error } = await supabase
       .from('polls')
       .select(`
@@ -212,7 +235,6 @@ function AdminDashboard() {
         </button>
       </div>
 
-      {/* Form Buat Voting */}
       <div style={{ background: '#f8f9fa', padding: '20px', borderRadius: '12px', border: '1px solid #ddd', marginBottom: '40px' }}>
         <h3>Buat Voting Baru</h3>
         <form onSubmit={handleCreatePoll}>
@@ -242,7 +264,6 @@ function AdminDashboard() {
         </form>
       </div>
 
-      {/* Rekap Jumlah Suara (Hanya terlihat di sini) */}
       <div>
         <h3>📊 Rekapitulasi Jumlah Suara (Privat Admin)</h3>
         {polls.map((poll) => (
