@@ -5,7 +5,46 @@ import { supabase } from './supabase';
 export default function App() {
   return (
     <BrowserRouter>
-      <div style={{ padding: '20px', maxWidth: '800px', margin: '0 auto', fontFamily: 'sans-serif' }}>
+      {/* CSS Global untuk Desain Tajam ala TGA Players' Voice */}
+      <style>{`
+        body {
+          margin: 0;
+          padding: 0;
+          background-color: #0b0e14; /* Warna background gelap pekat */
+          color: #ffffff;
+          font-family: 'Inter', 'Segoe UI', Tahoma, sans-serif;
+        }
+        .candidate-card {
+          transition: opacity 0.2s ease;
+          display: flex;
+          flex-direction: column;
+        }
+        .candidate-card:hover {
+          opacity: 0.8;
+        }
+        .vote-btn {
+          width: 100%;
+          padding: 12px;
+          background-color: #1e88e5; /* Warna biru khas tombol di gambar */
+          color: white;
+          border: none;
+          font-weight: 700;
+          letter-spacing: 1px;
+          cursor: pointer;
+          text-transform: uppercase;
+          font-size: 14px;
+        }
+        .vote-btn:disabled {
+          background-color: #333333;
+          color: #888888;
+          cursor: not-allowed;
+        }
+        input, button, type[file] {
+          font-family: inherit;
+        }
+      `}</style>
+      
+      <div style={{ maxWidth: '1000px', margin: '0 auto', padding: '40px 20px' }}>
         <Routes>
           <Route path="/" element={<PublicVotingPage />} />
           <Route path="/admin" element={<AdminLoginPage />} />
@@ -15,14 +54,13 @@ export default function App() {
   );
 }
 
-// --- 1. HALAMAN PUBLIK (Hanya 1 Vote Per Browser) ---
+// --- 1. HALAMAN PUBLIK (Desain Tajam TGA Players' Voice) ---
 function PublicVotingPage() {
   const [polls, setPolls] = useState([]);
   const [votedPolls, setVotedPolls] = useState({});
 
   useEffect(() => {
     fetchPolls();
-    // Membaca memori browser saat web pertama kali dibuka
     const storedVotes = JSON.parse(localStorage.getItem('votedPolls')) || {};
     setVotedPolls(storedVotes);
   }, []);
@@ -39,9 +77,8 @@ function PublicVotingPage() {
   }
 
   async function handleVote(pollId, optionId) {
-    // Keamanan ganda: Tolak jika memori browser mencatat sudah vote
     if (votedPolls[pollId]) {
-      alert("Kamu sudah memberikan suara untuk voting ini!");
+      alert("Kamu sudah memberikan suara pada kategori ini.");
       return;
     }
 
@@ -53,56 +90,66 @@ function PublicVotingPage() {
       console.error(error);
       alert("Gagal melakukan vote.");
     } else {
-      alert("Berhasil melakukan vote! Terima kasih suaranya.");
-      
-      // Simpan catatan ke memori browser agar tombol terkunci
       const newVotedPolls = { ...votedPolls, [pollId]: true };
       setVotedPolls(newVotedPolls);
       localStorage.setItem('votedPolls', JSON.stringify(newVotedPolls));
-      
       fetchPolls();
     }
   }
 
   return (
     <div>
-      <h1 style={{ textAlign: 'center' }}>🏆 Portal Voting Game</h1>
-      <h2 style={{ textAlign: 'center', color: '#555', marginBottom: '30px' }}>Silakan Berikan Suaramu!</h2>
+      {/* Header Judul (Kembali seperti semula dengan warna teal) */}
+      <div style={{ marginBottom: '40px' }}>
+        <h1 style={{ fontSize: '32px', fontWeight: '900', textTransform: 'uppercase', letterSpacing: '1px', margin: '0 0 8px 0', color: '#4dd0e1' }}>
+          Portal Voting Game
+        </h1>
+        <p style={{ color: '#a0aabf', fontSize: '14px', margin: 0 }}>Silakan Berikan Suaramu untuk Game Favoritmu!</p>
+      </div>
       
-      {polls.length === 0 ? <p style={{ textAlign: 'center' }}>Belum ada voting saat ini.</p> : null}
+      {polls.length === 0 ? <p style={{ color: '#8892b0' }}>Belum ada voting saat ini.</p> : null}
       
       {polls.map((poll) => {
         const hasVoted = votedPolls[poll.id];
 
         return (
-          <div key={poll.id} style={{ border: '2px solid #eee', padding: '20px', borderRadius: '12px', marginBottom: '25px', boxShadow: '0 4px 6px rgba(0,0,0,0.05)', background: 'white' }}>
-            <h3 style={{ marginTop: 0, textAlign: 'center', fontSize: '24px' }}>{poll.title}</h3>
-            
-            {/* Pesan jika sudah vote */}
-            {hasVoted && (
-              <div style={{ background: '#d4edda', color: '#155724', padding: '10px', borderRadius: '6px', textAlign: 'center', marginTop: '15px', fontWeight: 'bold' }}>
-                ✅ Kamu sudah memberikan suara pada kategori ini.
-              </div>
-            )}
+          <div key={poll.id} style={{ marginBottom: '60px' }}>
+            <div style={{ borderBottom: '1px solid #233546', paddingBottom: '10px', marginBottom: '20px', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <h2 style={{ fontSize: '20px', fontWeight: '700', textTransform: 'uppercase', margin: 0 }}>
+                {poll.title}
+              </h2>
+              {hasVoted && (
+                <span style={{ color: '#00e676', fontSize: '14px', fontWeight: 'bold' }}>✓ VOTED</span>
+              )}
+            </div>
 
-            <div style={{ display: 'flex', gap: '20px', marginTop: '20px' }}>
+            {/* Grid Kartu Kandidat (4 kolom seperti di gambar) */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '20px' }}>
               {poll.options.map((option) => (
-                <div key={option.id} style={{ flex: 1, textAlign: 'center', background: '#f8f9fa', padding: '15px', borderRadius: '8px', opacity: hasVoted ? 0.6 : 1 }}>
+                <div key={option.id} className="candidate-card">
+                  
+                  {/* Gambar Tajam Tanpa Lekukan */}
                   {option.image_url ? (
-                    <img src={option.image_url} alt={option.name} style={{ width: '100%', height: '200px', objectFit: 'cover', borderRadius: '8px', marginBottom: '10px' }} />
+                    <img src={option.image_url} alt={option.name} style={{ width: '100%', height: '280px', objectFit: 'cover', display: 'block' }} />
                   ) : (
-                    <div style={{ width: '100%', height: '200px', background: '#e9ecef', borderRadius: '8px', marginBottom: '10px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>No Image</div>
+                    <div style={{ width: '100%', height: '280px', background: '#1c212b', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#555' }}>NO IMAGE</div>
                   )}
                   
-                  <h4 style={{ margin: '15px 0' }}>{option.name}</h4>
-                  
-                  {/* Tombol akan mati dan abu-abu jika hasVoted = true */}
+                  {/* Tombol Biru Menempel di Bawah Gambar */}
                   <button 
+                    className="vote-btn"
                     onClick={() => handleVote(poll.id, option.id)}
-                    disabled={hasVoted}
-                    style={{ background: hasVoted ? '#6c757d' : '#28a745', color: 'white', border: 'none', padding: '10px 20px', borderRadius: '6px', cursor: hasVoted ? 'not-allowed' : 'pointer', fontSize: '16px', width: '100%' }}>
-                    {hasVoted ? 'Sudah Vote' : 'Vote'}
+                    disabled={hasVoted}>
+                    {hasVoted ? 'Voted' : 'Vote'}
                   </button>
+
+                  {/* Teks Nama Game di Bawah Tombol (Rata Kiri) */}
+                  <div style={{ paddingTop: '12px' }}>
+                    <h3 style={{ margin: 0, fontSize: '15px', fontWeight: 'bold', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+                      {option.name}
+                    </h3>
+                  </div>
+                  
                 </div>
               ))}
             </div>
@@ -113,46 +160,37 @@ function PublicVotingPage() {
   );
 }
 
-// --- 2. HALAMAN ADMIN DENGAN PROTEKSI PASSWORD & LIHAT HASIL SUARA ---
+// --- 2. HALAMAN ADMIN (Desain Kotak Tajam Menyesuaikan Tema) ---
 function AdminLoginPage() {
   const [isAuthenticated, setIsAuthenticated] = useState(false);
   const [passwordInput, setPasswordInput] = useState('');
-
   const ADMIN_PASSWORD = 'admin123'; 
 
   function handleLogin(e) {
     e.preventDefault();
-    if (passwordInput === ADMIN_PASSWORD) {
-      setIsAuthenticated(true);
-    } else {
-      alert('Password salah!');
-      setPasswordInput('');
-    }
+    if (passwordInput === ADMIN_PASSWORD) setIsAuthenticated(true);
+    else { alert('Password salah!'); setPasswordInput(''); }
   }
 
   if (!isAuthenticated) {
     return (
-      <div style={{ maxWidth: '400px', margin: '80px auto', background: '#f8f9fa', padding: '30px', borderRadius: '12px', border: '1px solid #ddd', textAlign: 'center' }}>
-        <h2>🔒 Login Admin</h2>
-        <p style={{ color: '#666', fontSize: '14px', marginBottom: '20px' }}>Masukkan password untuk mengakses panel admin.</p>
+      <div style={{ maxWidth: '400px', margin: '80px auto', background: '#131822', padding: '40px', border: '1px solid #233546', textAlign: 'center' }}>
+        <h2 style={{ margin: '0 0 10px 0', color: '#4dd0e1' }}>Admin Portal</h2>
+        <p style={{ color: '#8892b0', fontSize: '14px', marginBottom: '30px' }}>Masukkan password.</p>
         <form onSubmit={handleLogin}>
           <input 
-            type="password" placeholder="Masukkan Password..." 
+            type="password" placeholder="Password" 
             value={passwordInput} onChange={(e) => setPasswordInput(e.target.value)}
-            style={{ width: '100%', padding: '10px', marginBottom: '15px', borderRadius: '6px', border: '1px solid #ccc', boxSizing: 'border-box' }}
+            style={{ width: '100%', padding: '14px', marginBottom: '20px', border: '1px solid #333', background: '#0b0e14', color: 'white', boxSizing: 'border-box' }}
           />
-          <button type="submit" style={{ width: '100%', padding: '10px', background: '#007bff', color: 'white', border: 'none', borderRadius: '6px', fontSize: '16px', cursor: 'pointer' }}>
-            Masuk
-          </button>
+          <button type="submit" className="vote-btn">ENTER</button>
         </form>
       </div>
     );
   }
-
   return <AdminDashboard />;
 }
 
-// --- KOMPONEN PANEL ADMIN (Tempat Buat Voting & Lihat Jumlah Suara) ---
 function AdminDashboard() {
   const [polls, setPolls] = useState([]);
   const [newPollTitle, setNewPollTitle] = useState('');
@@ -162,122 +200,89 @@ function AdminDashboard() {
   const [image2, setImage2] = useState(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  useEffect(() => {
-    fetchAdminPolls();
-  }, []);
+  useEffect(() => { fetchAdminPolls(); }, []);
 
   async function fetchAdminPolls() {
-    const { data, error } = await supabase
-      .from('polls')
-      .select(`
-        id, title,
-        options ( id, name, image_url, votes (id) )
-      `);
-    if (error) console.error(error);
-    else setPolls(data);
+    const { data, error } = await supabase.from('polls').select(`id, title, options ( id, name, image_url, votes (id) )`);
+    if (!error) setPolls(data);
   }
 
   async function uploadImage(file) {
     if (!file) return null;
     const fileExt = file.name.split('.').pop();
     const fileName = `${Math.random()}.${fileExt}`;
-    
     const { error } = await supabase.storage.from('images').upload(fileName, file);
-    if (error) {
-      alert('Gagal upload gambar!');
-      return null;
-    }
-
-    const { data: publicUrlData } = supabase.storage.from('images').getPublicUrl(fileName);
-    return publicUrlData.publicUrl;
+    if (error) return null;
+    return supabase.storage.from('images').getPublicUrl(fileName).data.publicUrl;
   }
 
   async function handleCreatePoll(e) {
     e.preventDefault();
-    if (!newPollTitle || !option1 || !option2) {
-      alert("Harap isi judul dan minimal 2 pilihan!");
-      return;
-    }
-
+    if (!newPollTitle || !option1 || !option2) { alert("Isi judul dan minimal 2 kandidat!"); return; }
     setIsUploading(true);
     const imageUrl1 = await uploadImage(image1);
     const imageUrl2 = await uploadImage(image2);
-
-    const { data: pollData, error: pollError } = await supabase
-      .from('polls')
-      .insert([{ title: newPollTitle }])
-      .select();
-
-    if (pollError) {
-      setIsUploading(false);
-      return;
-    }
-    const newPollId = pollData[0].id;
-
+    const { data: pollData, error: pollError } = await supabase.from('polls').insert([{ title: newPollTitle }]).select();
+    if (pollError) { setIsUploading(false); return; }
+    
     await supabase.from('options').insert([
-      { poll_id: newPollId, name: option1, image_url: imageUrl1 },
-      { poll_id: newPollId, name: option2, image_url: imageUrl2 }
+      { poll_id: pollData[0].id, name: option1, image_url: imageUrl1 },
+      { poll_id: pollData[0].id, name: option2, image_url: imageUrl2 }
     ]);
 
     setNewPollTitle(''); setOption1(''); setOption2('');
-    setImage1(null); setImage2(null);
-    setIsUploading(false);
-    alert("Voting baru berhasil dibuat!");
-    fetchAdminPolls();
+    setImage1(null); setImage2(null); setIsUploading(false);
+    alert("Voting dipublish!"); fetchAdminPolls();
   }
+
+  const inputStyle = { width: '100%', marginBottom: '15px', padding: '12px', border: '1px solid #333', background: '#0b0e14', color: '#fff', boxSizing: 'border-box' };
 
   return (
     <div>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-        <h2 style={{ color: '#dc3545', margin: 0 }}>👑 Panel Admin (Rahasia)</h2>
-        <button onClick={() => window.location.href = '/'} style={{ background: '#6c757d', color: 'white', border: 'none', padding: '8px 15px', borderRadius: '6px', cursor: 'pointer' }}>
-          Keluar / Lihat Halaman Publik
-        </button>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '30px', borderBottom: '1px solid #233546', paddingBottom: '20px' }}>
+        <h2 style={{ margin: 0, color: '#4dd0e1' }}>Admin Dashboard</h2>
+        <button onClick={() => window.location.href = '/'} style={{ background: '#233546', color: 'white', border: 'none', padding: '10px 20px', cursor: 'pointer' }}>View Public Site</button>
       </div>
 
-      <div style={{ background: '#f8f9fa', padding: '20px', borderRadius: '12px', border: '1px solid #ddd', marginBottom: '40px' }}>
-        <h3>Buat Voting Baru</h3>
+      <div style={{ background: '#131822', padding: '30px', border: '1px solid #233546', marginBottom: '40px' }}>
+        <h3 style={{ marginTop: 0, marginBottom: '20px' }}>Create New Category</h3>
         <form onSubmit={handleCreatePoll}>
-          <input 
-            type="text" placeholder="Judul Voting" 
-            value={newPollTitle} onChange={(e) => setNewPollTitle(e.target.value)}
-            style={{ display: 'block', width: '100%', marginBottom: '15px', padding: '10px', borderRadius: '6px', boxSizing: 'border-box' }}
-          />
-          
-          <div style={{ display: 'flex', gap: '20px', marginBottom: '15px' }}>
-            <div style={{ flex: 1, background: 'white', padding: '15px', borderRadius: '8px', border: '1px solid #ccc' }}>
-              <h4>Kandidat 1</h4>
-              <input type="text" placeholder="Nama Game" value={option1} onChange={(e) => setOption1(e.target.value)} style={{ width: '100%', marginBottom: '10px', padding: '8px', boxSizing: 'border-box' }} />
-              <input type="file" accept="image/*" onChange={(e) => setImage1(e.target.files[0])} />
+          <input type="text" placeholder="Category Title" value={newPollTitle} onChange={(e) => setNewPollTitle(e.target.value)} style={inputStyle} />
+          <div style={{ display: 'flex', gap: '20px', marginBottom: '20px', flexWrap: 'wrap' }}>
+            <div style={{ flex: 1, minWidth: '250px', background: '#1c212b', padding: '20px' }}>
+              <h4 style={{ margin: '0 0 15px 0' }}>Nominee 1</h4>
+              <input type="text" placeholder="Game Name" value={option1} onChange={(e) => setOption1(e.target.value)} style={inputStyle} />
+              <input type="file" accept="image/*" onChange={(e) => setImage1(e.target.files[0])} style={{ color: '#aaa' }} />
             </div>
-
-            <div style={{ flex: 1, background: 'white', padding: '15px', borderRadius: '8px', border: '1px solid #ccc' }}>
-              <h4>Kandidat 2</h4>
-              <input type="text" placeholder="Nama Game" value={option2} onChange={(e) => setOption2(e.target.value)} style={{ width: '100%', marginBottom: '10px', padding: '8px', boxSizing: 'border-box' }} />
-              <input type="file" accept="image/*" onChange={(e) => setImage2(e.target.files[0])} />
+            <div style={{ flex: 1, minWidth: '250px', background: '#1c212b', padding: '20px' }}>
+              <h4 style={{ margin: '0 0 15px 0' }}>Nominee 2</h4>
+              <input type="text" placeholder="Game Name" value={option2} onChange={(e) => setOption2(e.target.value)} style={inputStyle} />
+              <input type="file" accept="image/*" onChange={(e) => setImage2(e.target.files[0])} style={{ color: '#aaa' }} />
             </div>
           </div>
-
-          <button disabled={isUploading} type="submit" style={{ padding: '10px 20px', background: isUploading ? '#6c757d' : '#007bff', color: 'white', border: 'none', borderRadius: '6px', width: '100%', cursor: 'pointer', fontSize: '16px' }}>
-            {isUploading ? 'Sedang Meng-upload...' : '🚀 Publikasikan Voting'}
+          <button disabled={isUploading} type="submit" className="vote-btn" style={{ background: isUploading ? '#333' : '#1e88e5' }}>
+            {isUploading ? 'UPLOADING...' : 'PUBLISH VOTING'}
           </button>
         </form>
       </div>
 
       <div>
-        <h3>📊 Rekapitulasi Jumlah Suara (Privat Admin)</h3>
-        {polls.map((poll) => (
-          <div key={poll.id} style={{ border: '2px solid #ccc', padding: '15px', borderRadius: '8px', marginBottom: '15px', background: 'white' }}>
-            <h4>{poll.title}</h4>
-            <ul>
-              {poll.options.map((opt) => (
-                <li key={opt.id} style={{ marginBottom: '5px', fontSize: '16px' }}>
-                  <strong>{opt.name}</strong>: <span style={{ color: 'red', fontWeight: 'bold' }}>{opt.votes ? opt.votes.length : 0} Suara</span>
-                </li>
-              ))}
-            </ul>
-          </div>
-        ))}
+        <h3 style={{ color: '#1e88e5' }}>📊 Live Voting Results</h3>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '20px' }}>
+          {polls.map((poll) => (
+            <div key={poll.id} style={{ background: '#131822', padding: '20px', border: '1px solid #233546' }}>
+              <h4 style={{ margin: '0 0 15px 0', borderBottom: '1px solid #333', paddingBottom: '10px' }}>{poll.title}</h4>
+              <ul style={{ listStyle: 'none', padding: 0, margin: 0 }}>
+                {poll.options.map((opt) => (
+                  <li key={opt.id} style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '10px', fontSize: '15px' }}>
+                    <span>{opt.name}</span>
+                    <span style={{ color: '#4dd0e1', fontWeight: 'bold' }}>{opt.votes ? opt.votes.length : 0} Votes</span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          ))}
+        </div>
       </div>
     </div>
   );
